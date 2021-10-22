@@ -1,0 +1,106 @@
+---
+- hosts: clusterctrl
+
+  tasks:
+
+    - name: Set required variable
+      set_fact:
+        packages:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        gpg_key_url: https://download.docker.com/linux/raspbian/gpg
+        gpg_key_out: /usr/share/keyrings/docker-archive-keyring.gpg
+        docker_packages:
+          - docker-ce 
+          - docker-ce-cli 
+          - containerd.io
+        repo_url: https://download.docker.com/linux/raspbian
+        release: buster
+        arch: armhf
+
+
+    - name: Report systems
+      debug:
+        var: ansible_facts['os_family'], ansible_facts['distribution']
+
+
+    - name: apt-get update && upgrade
+      apt:
+        update_cache: yes
+        upgrade: yes
+        autoremove: yes
+        autoclean: yes
+        force_apt_get: yes
+      become: yes
+      register: result
+
+
+    - name: Install aptitude using apt
+      become: true
+      apt: 
+        package: aptitude 
+        state: present 
+        force_apt_get: yes
+
+
+    - name: Enable container features
+      become: true
+      register: containers_enabled
+      replace:
+        path: /boot/cmdline.txt
+        regexp: '^([\w](?!.*\b{{ item }}\b).*)$'
+        replace: '\1 {{ item }}'
+      with_items:
+      - "cgroup_enable=cpuset"
+      - "cgroup_memory=1"
+      - "cgroup_enable=memory"
+
+
+      # TODO make big pi go last, since its the gateway to the Zeros
+    - name: Reboot if containers weren't already enabled
+      become: true
+      when: containers_enabled.changed
+      reboot:
+
+
+    - name: Install Docker Prereqs
+      become: true
+      apt:
+        package: "{{ packages }}"
+        state: present
+
+
+    - name: Add Docker GPG apt Key
+      become: true
+      apt_key:
+        url: "{{ gpg_key_url }}"
+        state: present
+        keyring: "{{ gpg_key_out }}"
+
+
+    - name: Add Docker Repository
+      become: true
+      apt_repository:
+        repo: "deb [arch={{arch}} signed-by={{ gpg_key_out }}] {{ repo_url }}  {{ release }} stable"
+        state: present
+
+
+    - name: Update apt and install docker-ce
+      become: true
+      apt: 
+        package: "{{ docker_packages }}"
+        state: latest
+        update_cache: yes 
+
+
+    - name: Add pi to docker group
+      become: true
+      user:
+        name: pi
+        append: yes
+        groups:
+          - docker
+

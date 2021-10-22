@@ -1,0 +1,30 @@
+---
+
+- name: Install Docker Prereqs
+  become: true
+  apt:
+    package: "{{ packages }}"
+    state: present
+
+- name: Add Docker GPG apt Key
+  become: true
+  apt_key:
+    url: "{{ gpg_key_url }}"
+    state: present
+    keyring: "{{ gpg_key_out }}"
+
+- name: Add Docker Repository
+  become: true
+  apt_repository:
+    repo: "deb [arch={{arch}} signed-by={{ gpg_key_out }}] {{ repo_url }}  {{ release }} stable"
+    state: present
+
+- name: Update apt and install docker-ce
+  become: true
+  tags:
+    - install
+  apt: 
+    package: "{{ docker_packages }}"
+    state: latest
+    update_cache: yes 
+
